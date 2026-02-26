@@ -1,0 +1,38 @@
+image: ubuntu:24.04
+
+clone:
+  depth: full
+
+pipelines:
+  default:
+    - step:
+        name: Cortex CLI Code Scan
+        script:
+          - set -euo pipefail
+          
+          # 1. Install System Dependencies + Node.js (Required for Code Engine)
+          - apt-get update && apt-get install -y --no-install-recommends curl jq ca-certificates tar gzip file libhyperscan5 libatomic1
+          - curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+          - apt-get install -y nodejs
+          
+         # 2. Download Cortex CLI
+          - |
+            DOWNLOAD_RESPONSE=$(curl -fsSL "${CORTEX_API_URL}/public_api/v1/unified-cli/releases/download-link?os=linux&architecture=amd64" \
+              -H "x-xdr-auth-id: ${CORTEX_API_KEY_ID}" \
+              -H "Authorization: ${CORTEX_API_KEY}")
+            CRTX_URL=$(echo "$DOWNLOAD_RESPONSE" | jq -r '.signed_url')
+            curl -fsSL -o cortexcli "$CRTX_URL"
+            chmod +x cortexcli
+
+          # 3. Run the Code Scan
+          # Note: We changed upload-mode to 'upload' so it hits your dashboard
+          - |
+            ./cortexcli \
+              --api-base-url "${CORTEX_API_URL}" \
+              --api-key "${CORTEX_API_KEY}" \
+              --api-key-id "${CORTEX_API_KEY_ID}" \
+              code scan \
+              --directory "${BITBUCKET_CLONE_DIR}" \
+              --branch "${BITBUCKET_BRANCH}" \
+              --repo-id ${BITBUCKET_REPO_FULL_NAME} \
+              
